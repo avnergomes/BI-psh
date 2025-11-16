@@ -12,6 +12,11 @@ if gdown_available and gdown_spec.loader is not None:
 else:
     gdown = None
 
+try:
+    import gdown
+except Exception:
+    gdown = None
+
 # Configuração da página
 st.set_page_config(
     page_title="PSH - Programa de Segurança Hídrica",
