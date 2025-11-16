@@ -2,6 +2,15 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from pathlib import Path
+from importlib import util
+
+gdown_spec = util.find_spec("gdown")
+gdown_available = gdown_spec is not None
+if gdown_available and gdown_spec.loader is not None:
+    gdown = util.module_from_spec(gdown_spec)
+    gdown_spec.loader.exec_module(gdown)
+else:
+    gdown = None
 
 try:
     import gdown
@@ -22,11 +31,16 @@ MICROBACIAS_FILE = "microbacias_selecionadas_otto.xlsx"
 
 def download_data_folder():
     """Tenta baixar os arquivos do Drive quando ausentes."""
+    drive_url = f"https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID}"
+
     if gdown is None:
         st.warning("Biblioteca gdown não disponível para download automático.")
+        st.info(
+            "Faça o download manual do Drive e coloque os arquivos na pasta `data/`.\n"
+            f"Link direto: [{drive_url}]({drive_url})"
+        )
         return
 
-    drive_url = f"https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID}"
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -37,6 +51,10 @@ def download_data_folder():
             "Não foi possível baixar os dados automaticamente. "
             "Verifique a conexão ou realize o download manual.")
         st.exception(exc)
+        st.info(
+            "Download manual disponível em: "
+            f"[{drive_url}]({drive_url})"
+        )
 
 # Função para cache de dados
 @st.cache_data
