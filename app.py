@@ -3,6 +3,11 @@ import pandas as pd
 import plotly.express as px
 from pathlib import Path
 
+try:
+    import gdown
+except Exception:
+    gdown = None
+
 # Configuração da página
 st.set_page_config(
     page_title="PSH - Programa de Segurança Hídrica",
@@ -10,15 +15,38 @@ st.set_page_config(
     layout="wide"
 )
 
+DATA_DIR = Path("data")
+DRIVE_FOLDER_ID = "1mrygqlHMjH6_Ix_q2uM429hApB1NJBav"
+MICROBACIAS_FILE = "microbacias_selecionadas_otto.xlsx"
+
+
+def download_data_folder():
+    """Tenta baixar os arquivos do Drive quando ausentes."""
+    if gdown is None:
+        st.warning("Biblioteca gdown não disponível para download automático.")
+        return
+
+    drive_url = f"https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID}"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with st.spinner("Baixando dados do Google Drive..."):
+            gdown.download_folder(url=drive_url, output=str(DATA_DIR), quiet=True, use_cookies=False)
+    except Exception as exc:  # noqa: BLE001
+        st.error(
+            "Não foi possível baixar os dados automaticamente. "
+            "Verifique a conexão ou realize o download manual.")
+        st.exception(exc)
+
 # Função para cache de dados
 @st.cache_data
 def load_data(file_name):
     """Carrega dados com cache para otimização"""
-    path = Path("data") / file_name
+    path = DATA_DIR / file_name
     if path.exists():
         try:
             return pd.read_excel(path)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             st.error(f"Erro ao carregar {file_name}: {e}")
             return None
     return None
@@ -63,15 +91,22 @@ def safe_plot_bar(df, id_list, group_col, value_col, title, xlabel, ylabel,
     
     st.plotly_chart(fig, use_container_width=True)
 
+# Garantir pasta de dados
+DATA_DIR.mkdir(exist_ok=True)
+
 # Carregar tabela de microbacias (base para filtros)
-microbacias = load_data("microbacias_selecionadas_otto.xlsx")
+microbacias = load_data(MICROBACIAS_FILE)
+
+if microbacias is None:
+    download_data_folder()
+    microbacias = load_data(MICROBACIAS_FILE)
 
 if microbacias is None:
     st.error("Arquivo microbacias_selecionadas_otto.xlsx não encontrado!")
     st.stop()
 
 # Verificar colunas essenciais
-required_cols = ['ID', 'Bacia', 'Manancial']
+required_cols = ['ID', 'Bacia', 'Manancial', 'Nº Manancial', 'Nome Manancial']
 missing_cols = [col for col in required_cols if col not in microbacias.columns]
 if missing_cols:
     st.error(f"Colunas faltando em microbacias: {missing_cols}")
@@ -85,27 +120,50 @@ st.markdown("### Painel Interativo de Diagnóstico Territorial")
 # Sidebar com filtros
 with st.sidebar:
     st.markdown("### 🎛️ Filtros")
-    
+
     # Filtro de Bacia
     bacias = sorted(microbacias['Bacia'].dropna().unique())
-    selected_bacia = st.multiselect("Bacia", bacias, default=bacias[:1] if bacias else [])
-    
-    # Filtrar microbacias baseado na bacia
+    selected_bacia = st.multiselect("Bacia", bacias, default=bacias)
+
+    filtered_mb = microbacias.copy()
     if selected_bacia:
-        filtered_mb = microbacias[microbacias['Bacia'].isin(selected_bacia)]
-    else:
-        filtered_mb = microbacias
-    
+        filtered_mb = filtered_mb[filtered_mb['Bacia'].isin(selected_bacia)]
+
     # Filtro de Manancial
     mananciais = sorted(filtered_mb['Manancial'].dropna().unique())
-    selected_manancial = st.multiselect("Manancial", mananciais)
-    
+    selected_manancial = st.multiselect("Manancial", mananciais, default=mananciais)
     if selected_manancial:
         filtered_mb = filtered_mb[filtered_mb['Manancial'].isin(selected_manancial)]
-    
-    # IDs selecionados
-    selected_ids = filtered_mb['ID'].tolist()
-    
+
+    # Filtro por Nº do Manancial
+    num_col = 'Nº Manancial'
+    numeros = sorted(filtered_mb[num_col].dropna().unique(), key=str)
+    selected_num = st.multiselect("Nº Manancial", numeros, default=numeros)
+    if selected_num:
+        filtered_mb = filtered_mb[filtered_mb[num_col].isin(selected_num)]
+
+    # Filtro por Nome do Manancial
+    nomes = sorted(filtered_mb['Nome Manancial'].dropna().unique())
+    selected_nome = st.multiselect("Nome do Manancial", nomes, default=nomes)
+    if selected_nome:
+        filtered_mb = filtered_mb[filtered_mb['Nome Manancial'].isin(selected_nome)]
+
+    # IDs selecionados (com label informativo)
+    id_labels = {
+        row['ID']: f"{row['ID']} - {row['Nome Manancial']}".strip()
+        for _, row in filtered_mb[['ID', 'Nome Manancial']].drop_duplicates().iterrows()
+    }
+
+    selected_ids = st.multiselect(
+        "Microbacias (ID)",
+        options=list(id_labels.keys()),
+        default=list(id_labels.keys()),
+        format_func=lambda x: id_labels.get(x, str(x)),
+    )
+
+    if not selected_ids:
+        selected_ids = list(id_labels.keys())
+
     st.markdown("---")
     st.info(f"**{len(selected_ids)}** microbacias selecionadas")
 
