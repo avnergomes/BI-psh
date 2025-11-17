@@ -3,6 +3,9 @@ import pandas as pd
 import plotly.express as px
 from pathlib import Path
 
+DATA_DIR = Path("data")
+DEFAULT_DATA_URL = "https://drive.google.com/drive/folders/1mrygqlHMjH6_Ix_q2uM429hApB1NJBav?usp=drive_link"
+
 # Configuração da página
 st.set_page_config(
     page_title="PSH - Programa de Segurança Hídrica",
@@ -10,11 +13,58 @@ st.set_page_config(
     layout="wide"
 )
 
+
+@st.cache_data(show_spinner=False)
+def download_data_folder(folder_url: str):
+    """Baixa todos os arquivos Excel do Google Drive para a pasta local de dados."""
+    import gdown
+
+    DATA_DIR.mkdir(exist_ok=True)
+    return gdown.download_folder(
+        folder_url,
+        output=str(DATA_DIR),
+        quiet=True,
+        use_cookies=False,
+    )
+
+
+def ensure_data_files(required_files):
+    """Garante que os arquivos necessários estão disponíveis localmente."""
+
+    DATA_DIR.mkdir(exist_ok=True)
+    missing = [file for file in required_files if not (DATA_DIR / file).exists()]
+
+    if not missing:
+        return True
+
+    folder_url = st.secrets.get("DATA_FOLDER_URL", DEFAULT_DATA_URL)
+    with st.spinner("Baixando arquivos de dados (Google Drive)..."):
+        try:
+            download_data_folder(folder_url)
+        except Exception as exc:
+            st.error(
+                "Não foi possível baixar os dados. Verifique o link da pasta ou a conexão de rede."
+            )
+            st.exception(exc)
+            return False
+
+    remaining = [file for file in required_files if not (DATA_DIR / file).exists()]
+    if remaining:
+        st.error(
+            "Arquivos essenciais não foram encontrados após o download: "
+            + ", ".join(remaining)
+        )
+        return False
+
+    return True
+
 # Função para cache de dados
 @st.cache_data
 def load_data(file_name):
     """Carrega dados com cache para otimização"""
-    path = Path("data") / file_name
+    path = DATA_DIR / file_name
+    if not path.exists():
+        return None
     if path.exists():
         try:
             return pd.read_excel(path)
@@ -62,6 +112,25 @@ def safe_plot_bar(df, id_list, group_col, value_col, title, xlabel, ylabel,
                     title=title, labels={group_col: xlabel, value_col: ylabel})
     
     st.plotly_chart(fig, use_container_width=True)
+
+required_files = [
+    "microbacias_selecionadas_otto.xlsx",
+    "altimetria_otto.xlsx",
+    "declividade_otto.xlsx",
+    "solos_otto.xlsx",
+    "caf_otto.xlsx",
+    "educacao_otto.xlsx",
+    "construcoes_otto.xlsx",
+    "imoveiscar_otto.xlsx",
+    "nascentes_otto.xlsx",
+    "hidrografia_otto.xlsx",
+    "sigarh_otto.xlsx",
+    "uso_solo_otto.xlsx",
+    "conflitosdeuso_otto.xlsx",
+]
+
+if not ensure_data_files(required_files):
+    st.stop()
 
 # Carregar tabela de microbacias (base para filtros)
 microbacias = load_data("microbacias_selecionadas_otto.xlsx")

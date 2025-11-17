@@ -42,7 +42,11 @@ Todas as outras tabelas usam a coluna **ID** como chave de relacionamento.
 
 ## 📁 Arquivos de Dados
 
-Os dados estão organizados na pasta `data/` com os seguintes arquivos:
+Os dados são baixados automaticamente da pasta do Google Drive: `https://drive.google.com/drive/folders/1mrygqlHMjH6_Ix_q2uM429hApB1NJBav?usp=drive_link`.
+
+Para ambientes onde o link precise ser alterado, defina `DATA_FOLDER_URL` em `st.secrets` para apontar para outra pasta pública do Google Drive.
+
+Os arquivos ficam organizados localmente na pasta `data/` com os seguintes nomes:
 
 - `microbacias_selecionadas_otto.xlsx` - Tabela base com filtros
 - `altimetria_otto.xlsx` - Classes de altitude
